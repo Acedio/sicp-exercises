@@ -35,3 +35,38 @@
   (put 'deriv '+ d-sum)
   (put 'deriv '* d-product)
   'done)
+
+(define (get-record name file)
+  (apply-generic 'get-record name file))
+
+(define (get-salary record)
+  (apply-generic 'get-salary record))
+
+(define (find-employee-record name files)
+  (if (null? files)
+    #f
+    (let ((record (get-record name (car files))))
+      (if record
+        record
+        (find-employee-record name (cdr files))))))
+
+(define (make-from-real-imag x y)
+  (define (dispatch op)
+    (cond ((eq? op 'real-part) x)
+          ((eq? op 'imag-part) y)
+          ((eq? op 'magnitude)
+           (sqrt (+ (square x) (square y))))
+          ((eq? op 'angle) (atan y x))
+          (else
+           (error "Unknown op: MAKE-FROM-REAL-IMAG" op))))
+  dispatch)
+
+(define (make-from-mag-ang m a)
+  (define (dispatch op)
+    (cond ((eq? op 'real-part) (* m (cos a)))
+          ((eq? op 'imag-part) (* m (sin a)))
+          ((eq? op 'magnitude) m)
+          ((eq? op 'angle) a)
+          (else
+            (error "Unknown op: MAKE-FROM-MAG-ANG" op))))
+  dispatch)

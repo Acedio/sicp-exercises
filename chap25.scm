@@ -203,3 +203,41 @@
   ((get 'make-from-real-imag 'complex) x y))
 (define (make-complex-from-mag-ang r a)
   ((get 'make-from-mag-ang 'complex) r a))
+
+; Being tricksy and reusing the global table.
+(define (put-coercion from to fn)
+  (put to from fn))
+(define (get-coercion from to)
+  (get to from))
+
+; Coercing version
+(define (apply-generic op . args)
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+      (if proc
+          (apply proc (map contents args))
+          (if (= (length args) 2)
+              (let ((type1 (car type-tags))
+                    (type2 (cadr type-tags))
+                    (a1 (car args))
+                    (a2 (cadr args)))
+                (if (not (= type1 type2))
+                  (let ((t1->t2 
+                         (get-coercion type1
+                                       type2))
+                        (t2->t1 
+                         (get-coercion type2 
+                                       type1)))
+                    (cond (t1->t2
+                           (apply-generic 
+                            op (t1->t2 a1) a2))
+                          (t2->t1
+                           (apply-generic 
+                            op a1 (t2->t1 a2)))
+                          (else
+                           (error "No method for these types"
+                                  (list op type-tags)))))
+                  (error "No method for these types"
+                         (list op type-tags))))
+              (error "No method for these types"
+               (list op type-tags)))))))

@@ -3,7 +3,8 @@
         (else (cons type-tag contents))))
 
 (define (type-tag datum)
-  (cond ((number? datum) 'scheme-number)
+  (cond ((integer? datum) 'integer)
+        ((number? datum) 'scheme-number)
         ((pair? datum) (car datum))
         (else (error "Bad tagged datum: TYPE-TAG" datum))))
 
@@ -85,9 +86,33 @@
   (put 'make 'scheme-number
        (lambda (x) (tag x)))
   'done)
+(install-scheme-number-package)
 
 (define (make-scheme-number n)
   ((get 'make 'scheme-number) n))
+
+(define (install-integer-package)
+  (define (tag x)
+    (attach-tag 'integer x))
+  (put 'add '(integer integer)
+       (lambda (x y) (tag (+ x y))))
+  (put 'sub '(integer integer)
+       (lambda (x y) (tag (- x y))))
+  (put 'mul '(integer integer)
+       (lambda (x y) (tag (* x y))))
+  (put 'div '(integer integer)
+       (lambda (x y) (tag (/ x y))))
+  (put 'equ? '(integer integer)
+       (lambda (x y) (= x y)))
+  (put '=zero? '(integer)
+       (lambda (x) (= x 0)))
+  (put 'make 'integer
+       (lambda (x) (tag x)))
+  'done)
+(install-integer-package)
+
+(define (make-integer n)
+  ((get 'make 'integer) n))
 
 (define (install-rational-package)
   ;; internal procedures
@@ -131,7 +156,15 @@
        (lambda (x) (=zero? x)))
   (put 'make 'rational
        (lambda (n d) (tag (make-rat n d))))
+  (put 'numer 'rational numer)
+  (put 'denom 'rational denom)
   'done)
+(install-rational-package)
+
+(define (numer r)
+  ((get 'numer 'rational) r))
+(define (denom r)
+  ((get 'denom 'rational) r))
 
 (define (make-rational n d)
   ((get 'make 'rational) n d))
@@ -198,6 +231,7 @@
   (put 'magnitude '(complex) magnitude)
   (put 'angle '(complex) angle)
   'done)
+(install-complex-package)
 
 (define (make-complex-from-real-imag x y)
   ((get 'make-from-real-imag 'complex) x y))
@@ -210,7 +244,12 @@
 (define (get-coercion from to)
   (get to from))
 
-; Coercing version
+(put-coercion 'scheme-number
+              'rational
+              (lambda (int)
+                (make-rational (contents int) 1)))
+
+; Coercing version, 2.81
 (define (apply-generic op . args)
   (let ((type-tags (map type-tag args)))
     (let ((proc (get op type-tags)))
@@ -241,3 +280,67 @@
                          (list op type-tags))))
               (error "No method for these types"
                (list op type-tags)))))))
+
+(define (all x)
+  (cond ((null? x) #t)
+        ((car x) (all (cdr x)))
+        (else #f)))
+
+; Coercing version, 2.82
+(define (get-coercions type-tags to-type)
+      (let ((coercions
+              (map (lambda (from-type)
+                     (if (eq? from-type to-type)
+                       (lambda (x) x)
+                       (get-coercion from-type to-type)))
+                   type-tags)))
+        (if (all coercions)
+          coercions
+          #f)))
+
+(define (apply-coercions coercions args)
+  (if (null? coercions)
+    '()
+    (cons ((car coercions)
+           (car args))
+          (apply-coercions
+            (cdr coercions)
+            (cdr args)))))
+
+(define (repeat x n)
+  (cond ((< n 1) '())
+        (else (cons x (repeat x (- n 1))))))
+
+(define (apply-generic op . args)
+  (define (try-coercions type-tags to-try)
+    (if (null? to-try)
+      (error "No method for these types"
+             (list op type-tags))
+      (let ((coercions
+              (get-coercions type-tags (car to-try))))
+        (if coercions
+          (let ((proc (get op (repeat (car to-try)
+                                      (length args)))))
+            (if proc
+              (apply proc
+                     (map contents 
+                          (apply-coercions coercions args)))
+              (try-coercions type-tags (cdr to-try))))
+          (try-coercions type-tags (cdr to-try))))))
+  (let ((type-tags (map type-tag args)))
+    (let ((proc (get op type-tags)))
+      (if proc
+          (apply proc (map contents args))
+          (try-coercions type-tags type-tags)))))
+
+; 2.83
+(define (raise x) (apply-generic 'raise x))
+(put 'raise '(integer)
+     (lambda (x)
+       (make-rational x 1)))
+(put 'raise '(rational)
+     (lambda (x)
+       (make-scheme-number (/ (numer x) (denom x) 1.0))))
+(put 'raise '(scheme-number)
+     (lambda (x)
+       (make-complex-from-real-imag x 0)))

@@ -3,8 +3,7 @@
         (else (cons type-tag contents))))
 
 (define (type-tag datum)
-  (cond ((integer? datum) 'integer)
-        ((number? datum) 'scheme-number)
+  (cond ((number? datum) 'scheme-number)
         ((pair? datum) (car datum))
         (else (error "Bad tagged datum: TYPE-TAG" datum))))
 
@@ -92,27 +91,32 @@
   ((get 'make 'scheme-number) n))
 
 (define (install-integer-package)
+  (define (make-int x) (list (floor x)))
+  (define (int-value x) (car x))
   (define (tag x)
     (attach-tag 'integer x))
   (put 'add '(integer integer)
-       (lambda (x y) (tag (+ x y))))
+       (lambda (x y) (make-int (+ (int-value x) (int-value y)))))
   (put 'sub '(integer integer)
-       (lambda (x y) (tag (- x y))))
+       (lambda (x y) (make-int (- (int-value x) (int-value y)))))
   (put 'mul '(integer integer)
-       (lambda (x y) (tag (* x y))))
+       (lambda (x y) (make-int (* (int-value x) (int-value y)))))
   (put 'div '(integer integer)
-       (lambda (x y) (tag (/ x y))))
+       (lambda (x y) (make-int (floor (/ (int-value x) (int-value y))))))
   (put 'equ? '(integer integer)
-       (lambda (x y) (= x y)))
+       (lambda (x y) (= (int-value x) (int-value y))))
   (put '=zero? '(integer)
-       (lambda (x) (= x 0)))
+       (lambda (x) (= (int-value x) (make-int 0))))
   (put 'make 'integer
-       (lambda (x) (tag x)))
+       (lambda (x) (tag (make-int x))))
+  (put 'value 'integer
+       (lambda (x) (int-value x)))
   'done)
 (install-integer-package)
 
 (define (make-integer n)
   ((get 'make 'integer) n))
+(define (value x) ((get 'value 'integer) x))
 
 (define (install-rational-package)
   ;; internal procedures
@@ -334,13 +338,72 @@
           (try-coercions type-tags type-tags)))))
 
 ; 2.83
+(define (install-raise-package)
+  (put 'raise '(integer)
+       (lambda (x)
+         (make-rational (value x) 1)))
+  (put 'raise '(rational)
+       (lambda (x)
+         (make-scheme-number (/ (numer x) (denom x) 1.0))))
+  (put 'raise '(scheme-number)
+       (lambda (x)
+         (make-complex-from-real-imag x 0)))
+  'done)
+(install-raise-package)
 (define (raise x) (apply-generic 'raise x))
-(put 'raise '(integer)
-     (lambda (x)
-       (make-rational x 1)))
-(put 'raise '(rational)
-     (lambda (x)
-       (make-scheme-number (/ (numer x) (denom x) 1.0))))
-(put 'raise '(scheme-number)
-     (lambda (x)
-       (make-complex-from-real-imag x 0)))
+
+; 2.84
+(define (install-level-package)
+  (put 'level 'integer 1.0)
+  (put 'level 'rational 2.0)
+  (put 'level 'scheme-number 3.0)
+  (put 'level 'complex 4.0)
+  'done)
+(install-level-package)
+
+(define (level x) (get 'level (type-tag x)))
+
+(define (raise-to x target-level)
+  (cond ((= (level x)
+            target-level)
+         x)
+        ((< (level x)
+            target-level)
+         (raise-to (raise x) target-level))
+        (else (error "LEVEL IS ALREADY HIGHER"
+                     (list (level x) target-level)))))
+
+(define (apply-generic op . args)
+  (define (apply-helper op args)
+    (let ((type-tags (map type-tag args)))
+      (let ((proc (get op type-tags)))
+        (if proc
+          (apply proc (map contents args))
+          (let ((levels (map level args)))
+            (if (apply = levels)
+              (error
+                "No method for these types or raised: APPLY-GENERIC"
+                (list op type-tags))
+              (let ((max-level (apply max levels)))
+                (let ((raised-args (map (lambda (arg) (raise-to arg max-level)) args)))
+                  (apply-helper op raised-args)))))))))
+  (apply-helper op args))
+
+;2.85
+(define (install-project-package)
+  (put 'project 'rational (lambda (x) (make-integer (floor (/ (numer x) (denom x))))))
+  (put 'project 'scheme-number (lambda (x) (make-rational (floor (* 1000000 x)) 1000000)))
+  (put 'project 'complex (lambda (x) (real-part x)))
+  'done)
+(install-project-package)
+
+(define (drop x)
+  (let ((project (get 'project (type-tag x))))
+    (if project
+      (let ((projected (project (contents x))))
+        (if (equ? x (raise projected))
+          (drop projected)
+          x))
+      x)))
+
+;2.86 TODO

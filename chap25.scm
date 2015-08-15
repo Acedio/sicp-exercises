@@ -173,6 +173,81 @@
 (define (make-rational n d)
   ((get 'make 'rational) n d))
 
+(define (install-rectangular-package)
+  ;; internal procedures
+  (define (real-part z) (car z))
+  (define (imag-part z) (cdr z))
+  (define (make-from-real-imag x y) 
+    (cons x y))
+  (define (magnitude z)
+    (sqrt (+ (square (real-part z))
+             (square (imag-part z)))))
+  (define (angle z)
+    (atan (imag-part z) (real-part z)))
+  (define (make-from-mag-ang r a)
+    (cons (* r (cos a)) (* r (sin a))))
+  ;; interface to the rest of the system
+  (define (tag x) 
+    (attach-tag 'rectangular x))
+  (put 'real-part '(rectangular) real-part)
+  (put 'imag-part '(rectangular) imag-part)
+  (put 'magnitude '(rectangular) magnitude)
+  (put 'angle '(rectangular) angle)
+  (put 'make-from-real-imag 'rectangular
+       (lambda (x y) 
+         (tag (make-from-real-imag x y))))
+  (put 'make-from-mag-ang 'rectangular
+       (lambda (r a) 
+         (tag (make-from-mag-ang r a))))
+  'done)
+(install-rectangular-package)
+
+(define (install-polar-package)
+  ;; internal procedures
+  (define (magnitude z) (car z))
+  (define (angle z) (cdr z))
+  (define (make-from-mag-ang r a) (cons r a))
+  (define (real-part z)
+    (* (magnitude z) (cos (angle z))))
+  (define (imag-part z)
+    (* (magnitude z) (sin (angle z))))
+  (define (make-from-real-imag x y)
+    (cons (sqrt (+ (square x) (square y)))
+          (atan y x)))
+  ;; interface to the rest of the system
+  (define (tag x) (attach-tag 'polar x))
+  (put 'real-part '(polar) real-part)
+  (put 'imag-part '(polar) imag-part)
+  (put 'magnitude '(polar) magnitude)
+  (put 'angle '(polar) angle)
+  (put 'make-from-real-imag 'polar
+       (lambda (x y) 
+         (tag (make-from-real-imag x y))))
+  (put 'make-from-mag-ang 'polar
+       (lambda (r a) 
+         (tag (make-from-mag-ang r a))))
+  'done)
+(install-polar-package)
+
+(define (make-from-real-imag x y)
+  ((get 'make-from-real-imag 
+        'rectangular) 
+   x y))
+
+(define (make-from-mag-ang r a)
+  ((get 'make-from-mag-ang 
+        'polar) 
+   r a))
+
+(define (real-part z) 
+  (apply-generic 'real-part z))
+(define (imag-part z) 
+  (apply-generic 'imag-part z))
+(define (magnitude z) 
+  (apply-generic 'magnitude z))
+(define (angle z) 
+  (apply-generic 'angle z))
+
 (define (install-complex-package)
   ;; imported procedures from rectangular 
   ;; and polar packages
@@ -406,4 +481,75 @@
           x))
       x)))
 
-;2.86 TODO
+;2.86
+(define (square x) (mul x x))
+
+(define (install-rectangular-package)
+  ;; internal procedures
+  (define (real-part z) (car z))
+  (define (imag-part z) (cdr z))
+  (define (make-from-real-imag x y) 
+    (cons x y))
+  (define (magnitude z)
+    (square-root (add (square (real-part z))
+                      (square (imag-part z)))))
+  (define (angle z)
+    (arctangent (imag-part z) (real-part z)))
+  (define (make-from-mag-ang r a)
+    (cons (mul r (cosine a)) (mul r (sine a))))
+  ;; interface to the rest of the system
+  (define (tag x) 
+    (attach-tag 'rectangular x))
+  (put 'real-part '(rectangular) real-part)
+  (put 'imag-part '(rectangular) imag-part)
+  (put 'magnitude '(rectangular) magnitude)
+  (put 'angle '(rectangular) angle)
+  (put 'make-from-real-imag 'rectangular
+       (lambda (x y) 
+         (tag (make-from-real-imag x y))))
+  (put 'make-from-mag-ang 'rectangular
+       (lambda (r a) 
+         (tag (make-from-mag-ang r a))))
+  'done)
+(install-rectangular-package)
+
+(define (install-polar-package)
+  ;; internal procedures
+  (define (magnitude z) (car z))
+  (define (angle z) (cdr z))
+  (define (make-from-mag-ang r a) (cons r a))
+  ; Cosine and sine are defined below
+  (define (real-part z)
+    (mul (magnitude z) (cosine (angle z))))
+  (define (imag-part z)
+    (mul (magnitude z) (sine (angle z))))
+  (define (make-from-real-imag x y)
+    (cons (square-root (add (square x) (square y)))
+          (arctangent y x)))
+  ;; interface to the rest of the system
+  (define (tag x) (attach-tag 'polar x))
+  (put 'real-part '(polar) real-part)
+  (put 'imag-part '(polar) imag-part)
+  (put 'magnitude '(polar) magnitude)
+  (put 'angle '(polar) angle)
+  (put 'make-from-real-imag 'polar
+       (lambda (x y) 
+         (tag (make-from-real-imag x y))))
+  (put 'make-from-mag-ang 'polar
+       (lambda (r a) 
+         (tag (make-from-mag-ang r a))))
+  'done)
+(install-polar-package)
+
+(define (install-trig-package)
+  (put 'sin 'scheme-number (lambda (x) (sin x)))
+  (put 'cos 'scheme-number (lambda (x) (cos x)))
+  (put 'atan 'scheme-number (lambda (x y) (atan x y)))
+  (put 'sqrt 'scheme-number (lambda (x) (sqrt x)))
+  'done)
+(install-trig-package)
+
+(define (sine x) ((get 'sin 'scheme-number) (raise-to x (level 0))))
+(define (cosine x) ((get 'cos 'scheme-number) (raise-to x (level 0))))
+(define (arctangent x y) ((get 'atan 'scheme-number) (raise-to x (level 0)) (raise-to y (level 0))))
+(define (square-root x) ((get 'sqrt 'scheme-number) (raise-to x (level 0))))

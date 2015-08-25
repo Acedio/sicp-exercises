@@ -705,5 +705,25 @@
 
 ; 2.89
 ;; representation of terms and term lists for dense polys
-; Probably just handle terms the same (as pairs) but modify adjoin-terms to do the checks.
-; Maybe store the order of the polynomial?
+(define (adjoin-term term term-list)
+  (define (add-zeroes lst num)
+    (if (> num 0)
+      (add-zeroes (cons 0 lst) (- num 1))
+      lst))
+  (if (=zero? (coeff term))
+    term-list
+    (let ((delta (- (order term) (length term-list))))
+      (if (< delta 0)
+        (error "Tried to adjoin a term with an order lower than highest order term.")
+        (cons (coeff term) (add-zeroes term-list delta ))))))
+(define (the-empty-termlist) '())
+(define (first-term term-list) (make-term (length (cdr term-list))
+                                          (car term-list)))
+(define (rest-terms term-list) 
+  (define (skip-zeroes lst)
+    (cond ((null? lst) '())
+          ((=zero? (car lst)) (skip-zeroes (cdr lst)))
+          (else lst)))
+  (skip-zeroes (cdr term-list)))
+(define (empty-termlist? term-list)
+  (null? term-list))

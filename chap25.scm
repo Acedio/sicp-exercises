@@ -82,6 +82,8 @@
        (lambda (x y) (= x y)))
   (put '=zero? '(scheme-number)
        (lambda (x) (= x 0)))
+  (put 'negate '(scheme-number)
+       (lambda (x) (- x)))
   (put 'make 'scheme-number
        (lambda (x) (tag x)))
   'done)
@@ -91,6 +93,7 @@
   ((get 'make 'scheme-number) n))
 
 (define (install-integer-package)
+  ; Defined as a list to avoid casting reals to integers
   (define (make-int x) (list (floor x)))
   (define (int-value x) (car x))
   (define (tag x)
@@ -107,6 +110,8 @@
        (lambda (x y) (= (int-value x) (int-value y))))
   (put '=zero? '(integer)
        (lambda (x) (= (int-value x) (make-int 0))))
+  (put 'negate '(integer)
+       (lambda (x) (make-int (- (value x)))))
   (put 'make 'integer
        (lambda (x) (tag (make-int x))))
   (put 'value 'integer
@@ -158,17 +163,14 @@
        (lambda (x y) (equ?-rat x y)))
   (put '=zero? '(rational)
        (lambda (x) (=zero? x)))
+  (put 'negate '(rational)
+       (lambda (x) (tag (make-rat (- (numer x)) (denom x)))))
   (put 'make 'rational
        (lambda (n d) (tag (make-rat n d))))
   (put 'numer 'rational numer)
   (put 'denom 'rational denom)
   'done)
 (install-rational-package)
-
-(define (numer r)
-  ((get 'numer 'rational) r))
-(define (denom r)
-  ((get 'denom 'rational) r))
 
 (define (make-rational n d)
   ((get 'make 'rational) n d))
@@ -231,12 +233,12 @@
 
 (define (make-from-real-imag x y)
   ((get 'make-from-real-imag
-        'rectangular)
+        'complex)
    x y))
 
 (define (make-from-mag-ang r a)
   ((get 'make-from-mag-ang
-        'polar)
+        'complex)
    r a))
 
 (define (real-part z)
@@ -278,10 +280,12 @@
   (define (equ?-complex z1 z2)
     (and (= (real-part z1) (real-part z2))
          (= (imag-part z1) (imag-part z2))))
-  (define (=zero? z)
+  (define (=zero?-complex z)
     ; Could probably just use equ?-complex here.
     (and (= (real-part z) 0)
          (= (imag-part z) 0)))
+  (define (negate-complex z)
+    (make-from-real-imag (- (real-part z)) (- (imag-part z))))
   ;; interface to rest of the system
   (define (tag z) (attach-tag 'complex z))
   (put 'add '(complex complex)
@@ -299,6 +303,11 @@
   (put 'equ? '(complex complex)
        (lambda (z1 z2)
          (equ?-complex z1 z2)))
+  (put '=zero? '(complex)
+       (lambda (x)
+         (=zero?-complex x)))
+  (put 'negate '(complex)
+       (lambda (x) (negate-complex x)))
   (put 'make-from-real-imag 'complex
        (lambda (x y)
          (tag (make-from-real-imag x y))))
@@ -560,6 +569,28 @@
   ;; representation of poly
   (define (make-poly variable term-list)
     (cons variable term-list))
+  (define (variable p) (car p))
+  (define (term-list p) (cdr p))
+  (define (variable? x) (symbol? x))
+  (define (same-variable? v1 v2)
+    (and (variable? v1)
+         (variable? v2)
+         (eq? v1 v2)))
+
+  ;; representation of terms and term lists
+  (define (adjoin-term term term-list)
+    (if (=zero? (coeff term))
+        term-list
+        (cons term term-list)))
+  (define (the-empty-termlist) '())
+  (define (first-term term-list) (car term-list))
+  (define (rest-terms term-list) (cdr term-list))
+  (define (empty-termlist? term-list)
+    (null? term-list))
+  (define (make-term order coeff)
+    (list order coeff))
+  (define (order term) (car term))
+  (define (coeff term) (cadr term))
 
   (define (add-terms L1 L2)
     (cond ((empty-termlist? L1) L2)
@@ -630,17 +661,35 @@
                 MUL-POLY"
                (list p1 p2))))
 
+  (define (negate-poly p)
+    (define (negate-terms terms)
+      (if (empty-termlist? terms)
+        (the-empty-termlist)
+        (let ((term (first-term terms)))
+          (adjoin-term (make-term (order term)
+                                  (negate (coeff term)))
+                       (negate-terms (rest-terms terms))))))
+    (make-poly
+      (variable p)
+      (negate-terms (term-list p))))
+
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
   (put 'add '(polynomial polynomial)
        (lambda (p1 p2)
          (tag (add-poly p1 p2))))
+  (put 'sub '(polynomial polynomial)
+       (lambda (p1 p2)
+         (tag (add-poly p1 (negate-poly p2)))))
   (put 'mul '(polynomial polynomial)
        (lambda (p1 p2)
          (tag (mul-poly p1 p2))))
   (put '=zero? '(polynomial)
        (lambda (p)
          (empty-termlist? (term-list p))))
+  (put 'negate '(polynomial)
+       (lambda (x)
+         (tag (negate-poly x))))
   (put 'make 'polynomial
        (lambda (var terms)
          (tag (make-poly var terms))))
@@ -650,25 +699,11 @@
 (define (make-polynomial var terms)
   ((get 'make 'polynomial) var terms))
 
-(define (variable p) (car p))
-(define (term-list p) (cdr p))
-(define (variable? x) (symbol? x))
-(define (same-variable? v1 v2)
-  (and (variable? v1)
-       (variable? v2)
-       (eq? v1 v2)))
+; 2.88, negate dispersed throughout
+(define (negate x)
+  (apply-generic 'negate x))
 
-;; representation of terms and term lists
-(define (adjoin-term term term-list)
-  (if (=zero? (coeff term))
-      term-list
-      (cons term term-list)))
-(define (the-empty-termlist) '())
-(define (first-term term-list) (car term-list))
-(define (rest-terms term-list) (cdr term-list))
-(define (empty-termlist? term-list)
-  (null? term-list))
-(define (make-term order coeff)
-  (list order coeff))
-(define (order term) (car term))
-(define (coeff term) (cadr term))
+; 2.89
+;; representation of terms and term lists for dense polys
+; Probably just handle terms the same (as pairs) but modify adjoin-terms to do the checks.
+; Maybe store the order of the polynomial?

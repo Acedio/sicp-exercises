@@ -603,7 +603,6 @@
                      (add-terms
                       (rest-terms L1)
                       (rest-terms L2)))))))))
-
   (define (add-poly p1 p2)
     (if (same-variable? (variable p1)
                         (variable p2))
@@ -622,7 +621,6 @@
          (mul-term-by-all-terms
           (first-term L1) L2)
          (mul-terms (rest-terms L1) L2))))
-
   (define (mul-term-by-all-terms t1 L)
     (if (empty-termlist? L)
         (the-empty-termlist)
@@ -634,7 +632,6 @@
            (mul-term-by-all-terms
             t1
             (rest-terms L))))))
-
   (define (mul-poly p1 p2)
     (if (same-variable? (variable p1)
                         (variable p2))
@@ -646,17 +643,64 @@
                 MUL-POLY"
                (list p1 p2))))
 
+  (define (div-term t1 t2)
+    (make-term (- (order t1) (order t2))
+               (div (coeff t1) (coeff t2))))
+  (define (div-terms dividend-terms divisor-terms)
+    (if (empty-termlist? dividend-terms)
+      (list (the-empty-termlist) (the-empty-termlist))
+      (let ((dividend-first (first-term dividend-terms))
+            (divisor-first (first-term divisor-terms)))
+        (if (< (order dividend-first)
+               (order divisor-first))
+          (list (the-empty-termlist) dividend-terms)
+          (let ((term-quotient (div-term dividend-first divisor-first)))
+            (let ((new-dividend
+                    (sub-terms dividend-terms
+                               (mul-term-by-all-terms term-quotient divisor-terms))))
+              (let ((rest-of-result (div-terms new-dividend divisor-terms)))
+                (list (adjoin-term term-quotient (car rest-of-result))
+                      (cadr rest-of-result)))))))))
+  (define (div-poly p1 p2)
+    (cond ((not (same-variable? (variable p1)
+                                (variable p2)))
+           (error "Polys not in same var:
+                   DIV-POLY"
+                   (list p1 p2)))
+          ((=zero?-poly p2)
+           (error "Divide by zero error."))
+          (else
+            (make-poly
+              (variable p1)
+              (car (div-terms (term-list p1)
+                              (term-list p2)))))))
+
+  (define (negate-terms terms)
+    (if (empty-termlist? terms)
+      (the-empty-termlist)
+      (let ((term (first-term terms)))
+        (adjoin-term (make-term (order term)
+                                (negate (coeff term)))
+                     (negate-terms (rest-terms terms))))))
   (define (negate-poly p)
-    (define (negate-terms terms)
-      (if (empty-termlist? terms)
-        (the-empty-termlist)
-        (let ((term (first-term terms)))
-          (adjoin-term (make-term (order term)
-                                  (negate (coeff term)))
-                       (negate-terms (rest-terms terms))))))
     (make-poly
       (variable p)
       (negate-terms (term-list p))))
+
+  (define (sub-terms L1 L2)
+    (add-terms L1 (negate-terms L2)))
+  (define (sub-poly p1 p2)
+    (if (same-variable? (variable p1)
+                        (variable p2))
+        (make-poly
+          (variable p1)
+          (sub-terms (term-list p1) (term-list p2)))
+        (error "Polys not in same var:
+                ADD-POLY"
+               (list p1 p2))))
+
+  (define (=zero?-poly p)
+    (empty-termlist? (term-list p)))
 
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
@@ -665,13 +709,16 @@
          (tag (add-poly p1 p2))))
   (put 'sub '(polynomial polynomial)
        (lambda (p1 p2)
-         (tag (add-poly p1 (negate-poly p2)))))
+         (tag (sub-poly p1 p2))))
   (put 'mul '(polynomial polynomial)
        (lambda (p1 p2)
          (tag (mul-poly p1 p2))))
+  (put 'div '(polynomial polynomial)
+       (lambda (p1 p2)
+         (tag (div-poly p1 p2))))
   (put '=zero? '(polynomial)
        (lambda (p)
-         (empty-termlist? (term-list p))))
+         (=zero?-poly p)))
   (put 'negate '(polynomial)
        (lambda (x)
          (tag (negate-poly x))))

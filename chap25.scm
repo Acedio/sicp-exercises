@@ -442,6 +442,7 @@
   (put 'level 'rational 2.0)
   (put 'level 'scheme-number 3.0)
   (put 'level 'complex 4.0)
+  (put 'level 'polynomial 5.0)
   'done)
 (install-level-package)
 
@@ -702,6 +703,20 @@
   (define (=zero?-poly p)
     (empty-termlist? (term-list p)))
 
+  (define (gcd-terms t1 t2)
+    (if (empty-termlist? t2)
+      t1
+      (gcd-terms t2 (cadr (div-terms t1 t2)))))
+  (define (gcd-poly p1 p2)
+    (if (same-variable? (variable p1)
+                        (variable p2))
+      (make-poly
+        (variable p1)
+        (gcd-terms (term-list p1) (term-list p2)))
+      (error "Polys not in same var:
+              GCD-POLY"
+              (list p1 p2))))
+
   ;; interface to rest of the system
   (define (tag p) (attach-tag 'polynomial p))
   (put 'add '(polynomial polynomial)
@@ -722,6 +737,9 @@
   (put 'negate '(polynomial)
        (lambda (x)
          (tag (negate-poly x))))
+  (put 'greatest-common-divisor '(polynomial polynomial)
+       (lambda (p1 p2)
+         (tag (gcd-poly p1 p2))))
   (put 'make 'polynomial
        (lambda (var terms)
          (tag (make-poly var terms))))
@@ -777,6 +795,9 @@
   (put 'empty-termlist? '(dense-termlist)
        (lambda (term-list)
          (empty-termlist? term-list)))
+  (put 'make 'dense-termlist
+       (lambda (term-list)
+         (tag term-list)))
   'done)
 (install-dense-termlist-package)
 
@@ -813,6 +834,9 @@
   (put 'empty-termlist? '(sparse-termlist)
        (lambda (term-list)
          (empty-termlist? term-list)))
+  (put 'make 'sparse-termlist
+       (lambda (term-list)
+         (tag term-list)))
   'done)
 (install-sparse-termlist-package)
 
@@ -832,3 +856,59 @@
   (apply-generic 'rest-terms term-list))
 (define (empty-termlist? term-list)
   (apply-generic 'empty-termlist? term-list))
+(define (make-termlist term-list)
+  ((get 'make 'sparse-termlist) term-list))
+
+;; Skipping 2.92 for now :P
+
+(define (install-generic-rational-package)
+  ;; internal procedures
+  (define (numer x) (car x))
+  (define (denom x) (cdr x))
+  (define (make-rat n d)
+    (let ((g (greatest-common-divisor n d)))
+      (cons (div n g) (div d g))))
+  (define (add-rat x y)
+    (make-rat (add (mul (numer x) (denom y))
+                   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (sub-rat x y)
+    (make-rat (sub (mul (numer x) (denom y))
+                   (mul (numer y) (denom x)))
+              (mul (denom x) (denom y))))
+  (define (mul-rat x y)
+    (make-rat (mul (numer x) (numer y))
+              (mul (denom x) (denom y))))
+  (define (div-rat x y)
+    (make-rat (mul (numer x) (denom y))
+              (mul (denom x) (numer y))))
+  (define (equ?-rat x y)
+    (and (equ? (numer x) (numer y))
+         (equ? (denom x) (denom y))))
+  (define (=zero?-rat x)
+    (=zero? (numer x)))
+  ;; interface to rest of the system
+  (define (tag x) (attach-tag 'rational x))
+  (put 'add '(rational rational)
+       (lambda (x y) (tag (add-rat x y))))
+  (put 'sub '(rational rational)
+       (lambda (x y) (tag (sub-rat x y))))
+  (put 'mul '(rational rational)
+       (lambda (x y) (tag (mul-rat x y))))
+  (put 'div '(rational rational)
+       (lambda (x y) (tag (div-rat x y))))
+  (put 'equ? '(rational rational)
+       (lambda (x y) (equ?-rat x y)))
+  (put '=zero? '(rational)
+       (lambda (x) (=zero?-rat x)))
+  (put 'negate '(rational)
+       (lambda (x) (tag (make-rat (negate (numer x)) (denom x)))))
+  (put 'make 'rational
+       (lambda (n d) (tag (make-rat n d))))
+  (put 'numer 'rational numer)
+  (put 'denom 'rational denom)
+  'done)
+(install-generic-rational-package)
+
+(define (greatest-common-divisor a b)
+  (apply-generic 'greatest-common-divisor a b))

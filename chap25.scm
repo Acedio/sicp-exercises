@@ -703,10 +703,23 @@
   (define (=zero?-poly p)
     (empty-termlist? (term-list p)))
 
+  (define (integerizing-factor p-terms q-terms)
+    (let ((p-term (first-term p-terms))
+          (q-term (first-term q-terms)))
+      (let ((c (coeff q-term))
+            (o-p (order p-term))
+            (o-q (order q-term)))
+        ; c must be an integer
+        (if (integer? c)
+          (expt c (- (+ 1 o-p) o-q))
+          (error "TRIED TO INTEGERIZE NON-INT COEFF: " c)))))
+
   (define (gcd-terms t1 t2)
-    (if (empty-termlist? t2)
-      t1
-      (gcd-terms t2 (cadr (div-terms t1 t2)))))
+      (if (empty-termlist? t2)
+        t1
+        (let ((factor-list (make-termlist (list (list 0 (integerizing-factor t1 t2))))))
+          (gcd-terms t2 (cadr (div-terms (mul-terms t1 factor-list)
+                                         (mul-terms t2 factor-list)))))))
   (define (gcd-poly p1 p2)
     (if (same-variable? (variable p1)
                         (variable p2))

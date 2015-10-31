@@ -34,3 +34,39 @@
                  (error "CALL THE COPS!!!!!")
                  (begin (display "Incorrect password") (lambda (x) (display tries)))))))
   dispatch))
+
+(define (estimate-pi trials)
+  (sqrt (/ 6 (monte-carlo trials 
+                          cesaro-test))))
+(define (cesaro-test)
+   (= (gcd (random 10000) (random 10000)) 1))
+
+(define (monte-carlo trials experiment)
+  (define (iter trials-remaining trials-passed)
+    (cond ((= trials-remaining 0)
+           (/ trials-passed trials))
+          ((experiment)
+           (iter (- trials-remaining 1) 
+                 (+ trials-passed 1)))
+          (else
+           (iter (- trials-remaining 1) 
+                 trials-passed))))
+  (iter trials 0))
+
+(define (integral-test pred x1 x2 y1 y2)
+  (lambda ()
+    (let ((x-range (- x2 x1))
+          (y-range (- y2 y1)))
+      (let ((x (+ (random x-range) x1))
+            (y (+ (random y-range) y1)))
+        (pred x y)))))
+
+(define (square x) (* x x))
+
+(define (circle-pred x y)
+  (<= (+ (square (- x 5)) (square (- y 7))) (square 3)))
+
+(define (estimate-integral pred x1 x2 y1 y2 trials)
+  (let ((area (* (- x2 x1) (- y2 y1)))
+        (passed (monte-carlo trials (integral-test pred x1 x2 y1 y2))))
+    (* area passed)))

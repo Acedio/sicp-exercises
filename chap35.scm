@@ -57,14 +57,44 @@
 
 ; ex 3.60
 (define (mul-series s1 s2)
+  ; We don't find (cdr-stream s1) or (cdr-stream s2) here because
+  ; that would screw up the necessary delayed evaluation.
   (let ((c1 (car-stream s1))
-        (c2 (car-stream s2))
-        (x1 (cdr-stream s1))
-        (x2 (cdr-stream s2)))
+        (c2 (car-stream s2)))
     (cons-stream
       (* c1 c2)
       (add-streams
-        (cons-stream 0 (mul-series x1 x2))
+        (cons-stream 0 (mul-series (cdr-stream s1) (cdr-stream s2)))
         (add-streams
-          (scale-stream x1 c2)
-          (scale-stream x2 c1))))))
+          (scale-stream (cdr-stream s1) c2)
+          (scale-stream (cdr-stream s2) c1))))))
+
+; ex 3.61
+(define (invert-unit-series s)
+  (define inverted-unit-series
+    (cons-stream
+      1
+      (scale-stream
+        (mul-series (cdr-stream s)
+                    inverted-unit-series)
+        -1)))
+  inverted-unit-series)
+
+; ex 3.62
+(define (invert-non-unit-series s)
+  (define inverted-unit-series
+    (if (eq? 0 (car-stream s))
+      (error "Cannot invert stream with zero constant.")
+      (let ((inv-c (/ 1 (car-stream s))))
+        (cons-stream
+          inv-c
+          (scale-stream
+            (mul-series (cdr-stream s)
+                        inverted-unit-series)
+            (- inv-c))))))
+  inverted-unit-series)
+
+(define (div-series num den)
+  (mul-series num (invert-non-unit-series den)))
+
+(define tangent-series (div-series sine-series cosine-series))

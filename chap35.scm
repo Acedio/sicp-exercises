@@ -98,3 +98,60 @@
   (mul-series num (invert-non-unit-series den)))
 
 (define tangent-series (div-series sine-series cosine-series))
+
+(define (stream-map fn stream)
+  (cons-stream
+    (fn (car-stream stream))
+    (stream-map fn (cdr-stream stream))))
+
+(define (sqrt-improve guess x)
+  ;(display "improve ")
+  (/ (+ guess (/ x guess)) 2))
+
+(define (bad-sqrt-stream x)
+  (cons-stream
+    1.0
+    (stream-map
+      (lambda (guess)
+        (sqrt-improve guess x))
+      (bad-sqrt-stream x))))
+
+(define (sqrt-stream x)
+  (define guesses
+    (cons-stream
+      1.0
+      (stream-map
+        (lambda (guess)
+          (sqrt-improve guess x))
+        guesses)))
+  guesses)
+
+; 3.64
+(define (stream-limit s tolerance)
+  (define (stream-limit-impl s0 s1 rest)
+    (if (<= (abs (- s0 s1)) tolerance)
+      s1
+      (stream-limit-impl s1 (car-stream rest) (cdr-stream rest))))
+  (let ((s0 (car-stream s))
+        (rest (cdr-stream s)))
+    (stream-limit-impl s0 (car-stream rest) (cdr-stream rest))))
+
+; 3.65
+(define (terms-impl denom)
+  (let ((next (if (> denom 0)
+                (- (+ 1 denom))
+                (+ 1 (- denom)))))
+    (cons-stream (/ 1 denom) (terms-impl next))))
+(define ln2-terms
+  (terms-impl 1))
+
+(define (partial-sums s)
+  (define (impl s sum)
+    (let ((new-sum (+ sum (car-stream s))))
+      (cons-stream 
+        new-sum 
+        (impl (cdr-stream s) new-sum))))
+  (impl s 0))
+
+(define ln2-stream
+  (partial-sums ln2-terms))

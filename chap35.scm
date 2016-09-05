@@ -155,3 +155,97 @@
 
 (define ln2-stream
   (partial-sums ln2-terms))
+
+; 3.66
+; (x, y), x and y >= 1
+; if x == y then n = 2^y - 1
+; if x > y then n = 2^y - 1 + 2^(y-1) + (x - y - 1)*2^y
+
+(define (stream-null? s)
+  (null? s))
+
+(define (interleave s1 s2)
+  (if (stream-null? s1)
+      s2
+      (cons-stream 
+       (car-stream s1)
+       (interleave s2 (cdr-stream s1)))))
+
+(define (louis-pairs s t)
+  (interleave
+   (stream-map
+    (lambda (x) 
+      (list (car-stream s) x))
+    t)
+   (louis-pairs (cdr-stream s)
+                (cdr-stream t))))
+
+(define integers
+  (cons-stream 1 (add-streams ones integers)))
+
+; 3.68
+; louis-pairs hits a stack overflow because both arguments to `interleave` must
+; resolve before being passed. Resolving the second argument, (louis-pairs ...),
+; requires yet another set of arguments to resolve, involving another call to
+; louis-pairs, and so on and so forth. Stack overflowwwww.
+
+(define (pairs s t)
+  (cons-stream 
+    (list (car-stream s) (car-stream t))
+    (interleave
+     (stream-map
+      (lambda (x) 
+        (list (car-stream s) x))
+      (cdr-stream t))
+     (pairs (cdr-stream s)
+            (cdr-stream t)))))
+
+(define (triples s t u)
+  (cons-stream
+    (list (car-stream s) (car-stream t) (car-stream u))
+    (interleave
+      (interleave
+        (stream-map
+          (lambda (x)
+            (list (car-stream s) (car-stream t) x))
+          (cdr-stream u))
+        (stream-map
+          (lambda (x)
+            (cons (car-stream s) x))
+          (pairs (cdr-stream t) (cdr-stream u))))
+      (triples (cdr-stream s) (cdr-stream t) (cdr-stream u)))))
+
+(define (wiki-triples s t u)
+  (cons-stream
+    (list (car-stream s) (car-stream t) (car-stream u))
+    (interleave
+      (stream-map
+        (lambda (x)
+          (cons (car-stream s) x))
+        (cdr-stream (pairs t u)))
+      (wiki-triples (cdr-stream s) (cdr-stream t) (cdr-stream u)))))
+
+(define (filter-stream s pred)
+  (if (pred (car-stream s))
+    (cons-stream (car-stream s)
+                 (filter-stream (cdr-stream s) pred))
+    (filter-stream (cdr-stream s) pred)))
+
+(define (square x)
+  (* x x))
+
+(define (is-pythagorean-triple t)
+  (= (+ (square (car t)) (square (cadr t))) (square (caddr t))))
+
+; ex 3.69
+(define pythagorean-triples
+  (filter-stream (triples integers integers integers) is-pythagorean-triple))
+
+(define (stream-find s pred)
+  (define (iter s pred n)
+    (if (stream-null? s)
+      (cons -1 '())
+      (if (pred (car-stream s))
+        (cons n (car-stream s))
+        (iter (cdr-stream s) pred (+ n 1)))))
+  (iter s pred 0))

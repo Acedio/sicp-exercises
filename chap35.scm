@@ -249,3 +249,57 @@
         (cons n (car-stream s))
         (iter (cdr-stream s) pred (+ n 1)))))
   (iter s pred 0))
+
+; ex 3.73
+; Cheated on this one because I completely forgot how approximate integration works :P
+(define (integral integrand initial-value dt)
+  (define int
+    (cons-stream 
+     initial-value
+     (add-streams (scale-stream integrand dt)
+                  int)))
+  int)
+
+(define (RC R C dt)
+  (lambda (i v0)
+    (add-streams
+      (scale-stream i R)
+      (integral (scale-stream i (/ 1 C))
+                v0
+                dt))))
+
+; ex 3.74
+(define (sign-change-detector i0 i1)
+  (cond ((and (< i0 0)
+              (>= i1 0))
+         1)
+        ((and (>= i0 0)
+              (< i1 0))
+         -1)
+        (else 0)))
+
+; Alyssa's initial version
+(define (make-zero-crossings
+         input-stream last-value)
+  (cons-stream
+   (sign-change-detector 
+    (car-stream input-stream) 
+    last-value)
+   (make-zero-crossings 
+    (cdr-stream input-stream)
+    (car-stream input-stream))))
+
+(define (multi-stream-map proc . argstreams)
+  (if (null? (car argstreams))
+      '()
+      (cons-stream
+       (apply proc (map car-stream argstreams))
+       (apply multi-stream-map
+              (cons proc 
+                    (map cdr-stream
+                         argstreams))))))
+
+(define zero-crossings
+  (multi-stream-map sign-change-detector 
+                    sense-data 
+                    (cdr-stream sense-data)))

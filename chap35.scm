@@ -392,6 +392,9 @@
   (scale-stream (rand-int-stream seed) (/ 1.0 65536)))
 
 ; ex 3.82
+; Both the cesaro stream and the integral stream seem to be broken.
+; Running the Monte carlo on them winds up with extremely round numbers.
+; TODO: Fix it :P
 (define (monte-carlo-stream experiment-stream)
   (define (iter experiment-stream passed total)
     (let ((new-passed (if (stream-car experiment-stream)

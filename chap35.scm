@@ -381,44 +381,73 @@
                      (process-next (stream-cdr commands) next-rand)))))
   (process-next commands 0))
 
-(define (rand-stream seed)
-  (let ((next-rand (rand-update seed)))
+(define (rand-int-stream seed)
+  (define stream
     (cons-stream
-      next-rand
-      (rand-stream next-rand))))
+      (rand-update seed)
+      (stream-map rand-update stream)))
+  stream)
 
-(define (list-to-stream l)
-  (if (null? l)
-    '()
-    (cons-stream (car l) (list-to-stream (cdr l)))))
+(define (rand-stream seed)
+  (scale-stream (rand-int-stream seed) (/ 1.0 65536)))
 
 ; ex 3.82
-(define (estimate-pi trials)
-  (sqrt (/ 6 (monte-carlo trials 
-                          cesaro-test))))
-(define (cesaro-test)
-   (= (gcd (random 10000) (random 10000)) 1))
+(define (monte-carlo-stream experiment-stream)
+  (define (iter experiment-stream passed total)
+    (let ((new-passed (if (stream-car experiment-stream)
+                        (+ passed 1)
+                        passed))
+          (new-total (+ total 1)))
+      (cons-stream
+        (/ new-passed new-total)
+        (iter (stream-cdr experiment-stream) new-passed new-total))))
+  (iter experiment-stream 0 0))
 
-(define (monte-carlo trials experiment)
-  (define (iter trials-remaining trials-passed)
-    (cond ((= trials-remaining 0)
-           (/ trials-passed trials))
-          ((experiment)
-           (iter (- trials-remaining 1) 
-                 (+ trials-passed 1)))
-          (else
-           (iter (- trials-remaining 1) 
-                 trials-passed))))
-  (iter trials 0))
+(define (stream-ref n s)
+  (if (= n 0)
+    (stream-car s)
+    (stream-ref (- n 1) (stream-cdr s))))
+
+(define (grab-n n s)
+  (if (= n 0)
+    (cons-stream
+      '()
+      s)
+    (let ((result (grab-n (- n 1) (stream-cdr s))))
+      (cons-stream
+        (cons (stream-car s)
+              (stream-car result))
+        (stream-cdr result)))))
+
+(define (groups-of-n n s)
+  (let ((result (grab-n n s)))
+    (cons-stream
+      (stream-car result)
+      (groups-of-n n (stream-cdr result)))))
+
+(define (cesaro-test r1 r2)
+   (= (gcd r1 r2) 1))
+
+(define cesaro-stream
+  (stream-map
+    (lambda (rands)
+      (apply cesaro-test rands))
+    (groups-of-n 2 (rand-int-stream 2342))))
 
 (define (integral-test pred x1 x2 y1 y2)
-  (lambda ()
+  (lambda (r1 r2)
     (let ((x-range (- x2 x1))
           (y-range (- y2 y1)))
-      (let ((x (+ (random x-range) x1))
-            (y (+ (random y-range) y1)))
+      (let ((x (+ (* r1 x-range) x1))
+            (y (+ (* r2 y-range) y1)))
         (pred x y)))))
 
-
 (define (integral-test-stream pred x1 x2 y1 y2)
-  (
+  (define test
+    (integral-test pred x1 x2 y1 y2))
+  (stream-map (lambda (rands)
+                (test (car rands) (cadr rands)))
+              (groups-of-n 2 (rand-stream 3452))))
+
+(define (circle-pred x y)
+  (<= (+ (square (- x 5.0)) (square (- y 7.0))) (square 3.0)))

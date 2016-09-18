@@ -71,3 +71,63 @@
               (lambda (exp env)
                 (eval (cond->if exp) env))))
 (install-syntax)
+
+; 4.4
+(define (make-if predicate 
+                 consequent 
+                 alternative)
+  (list 'if 
+        predicate 
+        consequent 
+        alternative))
+(define (make-lambda parameters body)
+  (list 'lambda parameters body))
+(define (make-let parameters body)
+  (list 'let parameters body))
+
+(define (and->if exp)
+  (define (iter preds)
+    (cond ((null? preds) 'true)
+          ((null? (cdr preds)) (car preds))
+          (else (make-if (car preds)
+                         (iter (cdr preds))
+                         'false))))
+  (iter (cdr exp)))
+
+; Looking around online, seems people always do the derived form of 'or
+; incorrectly. It needs to return the first non-'false value, not 'true!
+; Solution comes with help from https://stackoverflow.com/questions/18284610/sicp-can-or-be-defined-in-lisp-as-a-syntactic-transformation-without-gensym
+; This ended up being much more difficult than anticipated o.O
+(define (or->if exp)
+  ; Generates the list of lambdas that represent the predicates.
+  ; Requires at least one predicate, but only >=2 will ever be passed.
+  (define (make-lambda-list preds)
+    (let ((first-lambda (make-lambda '() (car preds))))
+      (cond ((null? (cdr preds)) (list first-lambda))
+            (else (cons first-lambda
+                        (make-lambda-list (cdr preds)))))))
+  ; Generates an series of nested lets and ifs of the following structure:
+  ;   (let ((v ((car lambdas)))
+  ;         (lambdas (cdr lambdas)))
+  ;        (if v v (... further predicates ...)))
+  (define (make-let-if-structure len)
+    (cond ((= len 1) '((car lambdas)))
+          (else (make-let '((v ((car lambdas)))
+                            (lambdas (cdr lambdas)))
+                          (make-if 'v 'v (make-let-if-structure (- len 1)))))))
+  (cond 
+    ; Empty -> false
+    ((null? (cdr exp)) 'false)
+    ; One pred -> pred
+    ((null? (cddr exp)) (cadr exp))
+    ; Two+ preds -> fancy unrolled loop.
+    (else (make-let (list (list 'lambdas (cons 'list (make-lambda-list (cdr exp)))))
+                    (make-let-if-structure (length (cdr exp)))))))
+
+(define (install-and-or)
+  (put-syntax 'and
+              (lambda (exp env)
+                (eval (and->if exp) env)))
+  (put-syntax 'or
+              (lambda (exp env)
+                (eval (or->??? exp) env))))

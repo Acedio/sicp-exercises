@@ -24,7 +24,6 @@
 (define (operands exp) (cddr exp))
 
 ; 4.3
-
 (define (eval exp env)
   (cond ((self-evaluating? exp)
          exp)
@@ -131,3 +130,77 @@
   (put-syntax 'or
               (lambda (exp env)
                 (eval (or->??? exp) env))))
+
+; 4.5
+; Cond can be done similarly to or, where a set of lambdas capturing the
+; environment for each predicate is passed to a waterfall of ifs.
+(define (begin-actions exp) (cdr exp))
+(define (last-exp? seq) (null? (cdr seq)))
+(define (first-exp seq) (car seq))
+(define (rest-exps seq) (cdr seq))
+(define (sequence->exp seq)
+  (cond ((null? seq) seq)
+        ((last-exp? seq) (first-exp seq))
+        (else (make-begin seq))))
+(define (make-begin seq) (cons 'begin seq))
+
+(define (cond->if exp)
+  ; Generates the list of lambdas that represent the predicates.
+  ; Requires at least one predicate, but only >=2 will ever be passed.
+  (define (transform-case case)
+    (let ((l (length case)))
+      (cond ((< l 1) (error "empty case not supported"))
+            ((= l 1) (list 'list (make-lambda '() (car case))))
+            ((and (= l 3)
+                  (eq? '=> (cadr case)))
+             (list 'list
+                   (make-lambda '() (car case))
+                   ''=>
+                   (make-lambda '() (caddr case))))
+            ((eq? 'else (car case))
+             (list 'list
+                   ''else
+                   (make-lambda '() (sequence->exp (cdr case)))))
+            (else (list 'list
+                        (make-lambda '() (car case))
+                        (make-lambda '() (sequence->exp (cdr case))))))))
+  (define (transform-cases cases)
+    (define (iter rest)
+      (if (null? rest)
+        rest
+        (let* ((case (car rest))
+               (rest (cdr rest))
+               (transformed (transform-case case)))
+          (if (and (eq? 'else (cadr transformed))
+                   (not (null? rest)))
+            (error "non-terminal else disallowed")
+            (cons transformed (iter rest))))))
+    (if (= 0 (length cases))
+      (error "empty cond statement not supported")
+      (iter cases)))
+  (define (make-let-if-structure transformed-cases)
+    (if (null? transformed-cases)
+      'false
+      ; car is the first case, cdar is the first case sans 'list
+      (let* ((case (cdar transformed-cases))
+             (l (length case)))
+        (cond ((= l 1)
+               (make-let '((pred ((caar cases)))
+                           (cases (cdr cases)))
+                         (make-if 'pred 'pred (make-let-if-structure (cdr transformed-cases)))))
+              ((eq? ''else (car case))
+               '((cadar cases)))
+              ((= l 2)
+               (make-let '((pred ((caar cases)))
+                           (consequent (cadar cases))
+                           (cases (cdr cases)))
+                         (make-if 'pred '(consequent) (make-let-if-structure (cdr transformed-cases)))))
+              ((= l 3)
+               (make-let '((pred ((caar cases)))
+                           (consequent (caddar cases))
+                           (cases (cdr cases)))
+                         (make-if 'pred '((consequent) pred) (make-let-if-structure (cdr transformed-cases)))))
+              (else (error "wtf"))))))
+  (let ((transformed-cases (transform-cases (cdr exp))))
+    (make-let (list (list 'cases (cons 'list transformed-cases)))
+              (make-let-if-structure transformed-cases))))

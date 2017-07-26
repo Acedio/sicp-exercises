@@ -204,3 +204,24 @@
   (let ((transformed-cases (transform-cases (cdr exp))))
     (make-let (list (list 'cases (cons 'list transformed-cases)))
               (make-let-if-structure transformed-cases))))
+
+; 4.6
+
+(define (let->lambda exp)
+  (list (make-lambda
+          (map car (cadr exp))
+          (caddr exp))
+        (map cadr (cadr exp))))
+
+; 4.7
+; Should be fine to just add (eval (let*->nested-lets exp) env) to eval.
+; Further iterations will process the resulting nested lets.
+
+(define (let*->nested-lets exp)
+  (let iter ((bindings (cadr exp)) (body (caddr exp)))
+    (let ((l (length bindings)))
+      (cond ((= l 0)
+             body)
+            (else
+             (make-let (list (car bindings))
+                       (iter (cdr bindings) body)))))))

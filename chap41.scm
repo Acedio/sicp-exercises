@@ -225,3 +225,23 @@
             (else
              (make-let (list (car bindings))
                        (iter (cdr bindings) body)))))))
+
+; 4.8
+
+(define (make-set! symbol value)
+  (list 'set! symbol value))
+(define (let->lambda exp)
+  (define (let-lambda bindings body)
+    (make-lambda
+      (map car bindings)
+      body))
+  (if (= (length exp) 3)
+    (cons (let-lambda (cadr exp) (caddr exp))
+          (map cadr (cadr exp)))
+    (let ((name (cadr exp)) (bindings (caddr exp)) (body (cadddr exp)))
+      ; Outer let defines the scope of the named lambda.
+      (make-let (list (list name '(quote false)))
+                (make-begin
+                  (list
+                    (make-set! name (let-lambda bindings body))
+                    (cons name (map cadr bindings))))))))

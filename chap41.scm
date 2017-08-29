@@ -245,3 +245,77 @@
                   (list
                     (make-set! name (let-lambda bindings body))
                     (cons name (map cadr bindings))))))))
+
+; 4.9
+
+(define (make-while predicate body)
+  (make-let (list
+              (list 'predicate (make-lambda '() predicate))
+              (list 'body (make-lambda '() body)))
+            (make-if 'predicate
+                     'body
+                     '(quote false))))
+
+; 4.12
+(define (enclosing-environment env) (cdr env))
+(define (first-frame env) (car env))
+(define the-empty-environment '())
+
+(define (make-frame variables values)
+  (cons variables values))
+(define (frame-variables frame) (car frame))
+(define (frame-values frame) (cdr frame))
+(define (add-binding-to-frame! var val frame)
+  (set-car! frame (cons var (car frame)))
+  (set-cdr! frame (cons val (cdr frame))))
+
+(define (extend-environment vars vals base-env)
+  (if (= (length vars) (length vals))
+      (cons (make-frame vars vals) base-env)
+      (if (< (length vars) (length vals))
+          (error "Too many arguments supplied" 
+                 vars 
+                 vals)
+          (error "Too few arguments supplied" 
+                 vars 
+                 vals))))
+
+; Return the pair with cdr = frame[var], error if not found
+(define (find-var-in-frame var frame)
+  (define (scan vars vals)
+    (cond ((null? vars) '())
+          ((eq? var (car vars)) vals)
+          (else (scan (cdr vars) (cdr vals)))))
+  (scan (frame-variables frame) (frame-values frame)))
+
+; Finds the first matching var and returns the pair with cdr = frame[var]
+(define (find-var-in-env var env)
+  (if (null? env)
+    '()
+    (let* ((frame (first-frame env))
+           (val-pair (find-var-in-frame var frame)))
+      (if (null? val-pair)
+        (find-var-in-env var (enclosing-environment env))
+        val-pair))))
+        
+
+(define (lookup-variable-value var env)
+  (let ((val-pair (find-var-in-env var env)))
+    (if (null? val-pair)
+      (error "Could not find variable"
+             var)
+      (car val-pair))))
+
+(define (set-variable-value! var val env)
+  (let ((val-pair (find-var-in-env var env)))
+    (if (null? val-pair)
+      (error "Could not find variable"
+             var)
+      (set-car! val-pair val))))
+
+(define (define-variable! var val env)
+  (let* ((frame (first-frame env))
+         (val-pair (find-var-in-frame var frame)))
+    (if (null? val-pair)
+      (add-binding-to-frame! var val frame)
+      (set-car! val-pair val))))

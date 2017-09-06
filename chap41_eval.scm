@@ -43,6 +43,10 @@
 ; --------------------------
 
 (define eval-in-underlying-scheme eval)
+(define apply-in-underlying-scheme apply)
+; apply is defined later, but sticking a placeholder in the
+; current scope so eval doesn't bind to the underlying apply.
+(define (apply proc args) 'false)
 
 (define (eval exp env)
   (cond ((self-evaluating? exp)
@@ -246,26 +250,25 @@
 ; Apply and friends.
 ; ------------------
 
-(define apply-in-underlying-scheme apply)
-
-(define (apply procedure arguments)
-  (cond ((primitive-procedure? procedure)
-         (apply-primitive-procedure 
-          procedure 
-          arguments))
-        ((compound-procedure? procedure)
-         (eval-sequence
-           (procedure-body procedure)
-           (extend-environment
-             (procedure-parameters 
-              procedure)
-             arguments
-             (procedure-environment 
-              procedure))))
-        (else
-         (error "Unknown procedure 
-                 type: APPLY" 
+; apply was already defined above, so just modify that var.
+(set! apply
+  (lambda (procedure arguments)
+    (cond ((primitive-procedure? procedure)
+           (apply-primitive-procedure
+             procedure
+             arguments))
+          ((compound-procedure? procedure)
+           (eval-sequence
+             (procedure-body procedure)
+             (extend-environment
+               (procedure-parameters 
+                procedure)
+               arguments
+               (procedure-environment 
                 procedure))))
+          (else
+            (error "Unknown procedure type: APPLY"
+                   procedure)))))
 
 (define (primitive-procedure? proc)
   (tagged-list? proc 'primitive))

@@ -158,13 +158,13 @@
                         env))))
 
 (define (make-let parameters body)
-  (list 'let parameters body))
+  (cons 'let (cons parameters body)))
 (define (let-parameters exp)
   (cadr exp))
 (define (let-body exp)
-  (caddr exp))
+  (cddr exp))
 (define (let->lambda exp)
-  (list (make-lambda
+  (cons (make-lambda
           (map car (let-parameters exp))
           (let-body exp))
         (map cadr (let-parameters exp))))
@@ -175,16 +175,20 @@
 (define (first-exp seq) (car seq))
 (define (rest-exps seq) (cdr seq))
 (define (make-lambda parameters body)
-  (list 'lambda parameters body))
+  (cons 'lambda (cons parameters body)))
 (define (lambda-parameters exp)
   (cadr exp))
 (define (lambda-body exp)
-  (caddr exp))
+  (cddr exp))
+
+(define (cond-cases exp)
+  (cdr exp))
 
 (define (sequence->exp seq)
   (cond ((null? seq) seq)
         ((last-exp? seq) (first-exp seq))
         (else (make-begin seq))))
+; TODO: cond->if is broken now that make-lambda has been fixed.
 (define (cond->if exp)
   ; Generates the list of lambdas that represent the predicates.
   ; Requires at least one predicate, but only >=2 will ever be passed.
@@ -242,7 +246,7 @@
                            (cases (cdr cases)))
                          (make-if 'pred '((consequent) pred) (make-let-if-structure (cdr transformed-cases)))))
               (else (error "wtf"))))))
-  (let ((transformed-cases (transform-cases (cdr exp))))
+  (let ((transformed-cases (transform-cases (cond-cases exp))))
     (make-let (list (list 'cases (cons 'list transformed-cases)))
               (make-let-if-structure transformed-cases))))
 
@@ -382,3 +386,36 @@
 
 (define the-global-environment 
   (setup-environment))
+
+; ----
+; REPL
+; ----
+
+(define input-prompt  ";;; M-Eval input:")
+(define output-prompt ";;; M-Eval value:")
+
+(define (driver-loop)
+  (prompt-for-input input-prompt)
+  (let ((input (read)))
+    (let ((output 
+           (eval input 
+                 the-global-environment)))
+      (announce-output output-prompt)
+      (user-print output)))
+  (driver-loop))
+
+(define (prompt-for-input string)
+  (newline) (newline) 
+  (display string) (newline))
+
+(define (announce-output string)
+  (newline) (display string) (newline))
+
+(define (user-print object)
+  (if (compound-procedure? object)
+      (display 
+       (list 'compound-procedure
+             (procedure-parameters object)
+             (procedure-body object)
+             '<procedure-env>))
+      (display object)))

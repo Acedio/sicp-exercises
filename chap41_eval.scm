@@ -189,12 +189,11 @@
         ((last-exp? seq) (first-exp seq))
         (else (make-begin seq))))
 
-; TODO: Handle the total fallthrough case.
-; TODO: Copy over to chap41.scm after bugs are fixed.
 (define (cond->if exp)
   (define (transform-cases cases)
     (if (null? cases)
-      '(begin)
+      ; TODO: Handle the total fallthrough case.
+      'error-cond-not-handled
       (let ((case (car cases))
             (cases (cdr cases)))
         (let ((l (length case)))
@@ -207,7 +206,13 @@
                                    (transform-cases cases)))))
                 ((and (= l 3)
                       (eq? '=> (cadr case)))
-                 (error "unsupported cond type: =>"))
+                 (make-let (list (list 'pred (car case))
+                                 (list 'consequent-fn
+                                       (make-lambda '() (list (caddr case)))))
+                           (list (make-if
+                                   'pred
+                                   '((consequent-fn) pred)
+                                   (transform-cases cases)))))
                 ((eq? 'else (car case))
                  (if (null? cases)
                    (list (sequence->exp (cdr case)))

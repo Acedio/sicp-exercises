@@ -94,6 +94,9 @@
   (put-syntax 'let
               (lambda (exp env)
                 (eval (let->lambda exp) env)))
+  (put-syntax 'letrec
+              (lambda (exp env)
+                (eval (letrec->let exp) env)))
   (put-syntax 'cond
               (lambda (exp env)
                 (eval (cond->if exp) env))))
@@ -190,42 +193,71 @@
         (else (make-begin seq))))
 
 (define (cond->if exp)
+  ; transform-cases converts a list of cond cases into a list of
+  ; (pred consequent) lists. pred is a zero-argument lambda that returns a
+  ; non-false value if the consequent should be executed, or #f otherwise.
+  ; consequent is a one-argument lambda that takes the predicate result and
+  ; executes the behavior.
   (define (transform-cases cases)
     (if (null? cases)
-      ; TODO: Handle the total fallthrough case.
-      'error-cond-not-handled
-      (let ((case (car cases))
-            (cases (cdr cases)))
-        (let ((l (length case)))
-          (cond ((< l 1) (error "empty case not supported"))
-                ((= l 1)
-                 (make-let (list (list 'pred (car case)))
-                           (list (make-if
-                                   'pred
-                                   'pred
-                                   (transform-cases cases)))))
-                ((and (= l 3)
-                      (eq? '=> (cadr case)))
-                 (make-let (list (list 'pred (car case))
-                                 (list 'consequent-fn
-                                       (make-lambda '() (list (caddr case)))))
-                           (list (make-if
-                                   'pred
-                                   '((consequent-fn) pred)
-                                   (transform-cases cases)))))
-                ((eq? 'else (car case))
-                 (if (null? cases)
-                   (list (sequence->exp (cdr case)))
-                   (error "non-terminal else found")))
-                (else
-                 (make-let (list (list 'pred (car case))
-                                 (list 'consequent
-                                       (make-lambda '() (list (sequence->exp (cdr case))))))
-                           (list (make-if
-                                   'pred
-                                   '(consequent)
-                                   (transform-cases cases))))))))))
-  (transform-cases (cdr exp)))
+      '()
+      (let* ((case (car cases))
+             (rest (cdr cases))
+             (l (length case))
+             (transformed
+               (cond ((< l 1) (error "cond: empty case not supported"))
+                     ((= l 1)
+                      (list 'list
+                            (make-lambda '() (list (car case)))
+                            (make-lambda (list 'pred) (list 'pred))))
+                     ((and (= l 3)
+                           (eq? '=> (cadr case)))
+                      (list 'list
+                            (make-lambda '() (list (car case)))
+                            (make-lambda (list 'pred)
+                                         (list (caddr case) 'pred))))
+                     ((eq? 'else (car case))
+                      (if (not (null? rest))
+                        (error "non-terminal else found")
+                        (list 'list
+                              (make-lambda '() (list (quote #t)))
+                              (make-lambda (list 'pred)
+                                           (list (sequence->exp (cdr case)))))))
+                     (else
+                      (list 'list
+                            (make-lambda '() (list (car case)))
+                            (make-lambda (list 'pred)
+                                         (list (sequence->exp (cdr case)))))))))
+        (cons transformed (transform-cases rest)))))
+  (make-let (list (list 'cases (cons 'list (transform-cases (cdr exp)))))
+            (list (list 'letrec
+                        (list (list 'try-cases
+                                    (make-lambda (list 'cases)
+                                                 (list (make-if '(null? cases)
+                                                                'error-cond-not-handled
+                                                                (make-let (list '(pred ((car (car cases))))
+                                                                                '(consequent (cadr (car cases)))
+                                                                                '(rest (cdr cases)))
+                                                                          (list (make-if 'pred
+                                                                                         '(consequent pred)
+                                                                                         '(try-cases rest)))))))))
+        (list 'try-cases 'cases)))))
+
+(define (letrec->let exp)
+  (define (make-sets params body)
+    (if (null? params)
+      body
+      (let ((name (car (car params)))
+            (init (cadr (car params)))
+            (rest (cdr params)))
+        (cons (list 'set! name init) (make-sets rest body)))))
+  (let ((params (cadr exp))
+        (body (cddr exp)))
+    (make-let (map (lambda (param)
+                     (list (car param) (quote 'unset!)))
+                   params)
+              (make-sets params body))))
+
 
 ; ------------------
 ; Apply and friends.

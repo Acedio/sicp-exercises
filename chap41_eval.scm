@@ -215,12 +215,12 @@
                       (list 'list
                             (make-lambda '() (list (car case)))
                             (make-lambda (list 'pred)
-                                         (list (caddr case) 'pred))))
+                                         (list (list (caddr case) 'pred)))))
                      ((eq? 'else (car case))
                       (if (not (null? rest))
                         (error "non-terminal else found")
                         (list 'list
-                              (make-lambda '() (list (quote #t)))
+                              (make-lambda '() (list (list 'quote '#t)))
                               (make-lambda (list 'pred)
                                            (list (sequence->exp (cdr case)))))))
                      (else
@@ -229,19 +229,22 @@
                             (make-lambda (list 'pred)
                                          (list (sequence->exp (cdr case)))))))))
         (cons transformed (transform-cases rest)))))
-  (make-let (list (list 'cases (cons 'list (transform-cases (cdr exp)))))
-            (list (list 'letrec
-                        (list (list 'try-cases
-                                    (make-lambda (list 'cases)
-                                                 (list (make-if '(null? cases)
-                                                                'error-cond-not-handled
-                                                                (make-let (list '(pred ((car (car cases))))
-                                                                                '(consequent (cadr (car cases)))
-                                                                                '(rest (cdr cases)))
-                                                                          (list (make-if 'pred
-                                                                                         '(consequent pred)
-                                                                                         '(try-cases rest)))))))))
-        (list 'try-cases 'cases)))))
+  (list 'letrec
+        (list (list 'cases (cons 'list (transform-cases (cdr exp))))
+              ; try-cases recurses through cases, first evaluating the
+              ; predicate and, if true, passing the predicate to the consequent
+              ; lambda and returning the result. If false, moves to the next.
+              (list 'try-cases
+                    (make-lambda (list 'cases)
+                                 (list (make-if '(null? cases)
+                                                (list 'quote 'error-cond-not-handled)
+                                                (make-let (list '(pred ((car (car cases))))
+                                                                '(consequent (cadr (car cases)))
+                                                                '(rest (cdr cases)))
+                                                          (list (make-if 'pred
+                                                                         '(consequent pred)
+                                                                         '(try-cases rest)))))))))
+        (list 'try-cases 'cases)))
 
 (define (letrec->let exp)
   (define (make-sets params body)
@@ -254,7 +257,7 @@
   (let ((params (cadr exp))
         (body (cddr exp)))
     (make-let (map (lambda (param)
-                     (list (car param) (quote 'unset!)))
+                     (list (car param) (list 'quote 'unset!)))
                    params)
               (make-sets params body))))
 
@@ -380,6 +383,8 @@
 (define primitive-procedures
   (list (list 'car car)
         (list 'cdr cdr)
+        (list 'cadr cadr)
+        (list 'cddr cddr)
         (list 'cons cons)
         (list 'null? null?)
         (list '+ +)

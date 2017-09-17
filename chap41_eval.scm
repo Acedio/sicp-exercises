@@ -160,6 +160,7 @@
          (eval-sequence (rest-exps exps) 
                         env))))
 
+; parameters and body are lists of params and body expressions, respectively.
 (define (make-let parameters body)
   (cons 'let (cons parameters body)))
 (define (let-parameters exp)
@@ -177,15 +178,13 @@
 (define (last-exp? seq) (null? (cdr seq)))
 (define (first-exp seq) (car seq))
 (define (rest-exps seq) (cdr seq))
+; parameters and body are lists of params and body expressions, respectively.
 (define (make-lambda parameters body)
   (cons 'lambda (cons parameters body)))
 (define (lambda-parameters exp)
   (cadr exp))
 (define (lambda-body exp)
   (cddr exp))
-
-(define (cond-cases exp)
-  (cdr exp))
 
 (define (sequence->exp seq)
   (cond ((null? seq) seq)
@@ -229,21 +228,22 @@
                             (make-lambda (list 'pred)
                                          (list (sequence->exp (cdr case)))))))))
         (cons transformed (transform-cases rest)))))
+  ; try-cases recurses through cases, first evaluating the predicate and, if
+  ; true, passing the predicate to the consequent lambda and returning the
+  ; result. If false, moves to the next.
+  (define try-cases
+    (make-lambda (list 'cases)
+                 (list (make-if '(null? cases)
+                                (list 'quote 'error-cond-not-handled)
+                                (make-let (list '(pred ((car (car cases))))
+                                                '(consequent (cadr (car cases)))
+                                                '(rest (cdr cases)))
+                                          (list (make-if 'pred
+                                                         '(consequent pred)
+                                                         '(try-cases rest))))))))
   (list 'letrec
         (list (list 'cases (cons 'list (transform-cases (cdr exp))))
-              ; try-cases recurses through cases, first evaluating the
-              ; predicate and, if true, passing the predicate to the consequent
-              ; lambda and returning the result. If false, moves to the next.
-              (list 'try-cases
-                    (make-lambda (list 'cases)
-                                 (list (make-if '(null? cases)
-                                                (list 'quote 'error-cond-not-handled)
-                                                (make-let (list '(pred ((car (car cases))))
-                                                                '(consequent (cadr (car cases)))
-                                                                '(rest (cdr cases)))
-                                                          (list (make-if 'pred
-                                                                         '(consequent pred)
-                                                                         '(try-cases rest)))))))))
+              (list 'try-cases try-cases))
         (list 'try-cases 'cases)))
 
 (define (letrec->let exp)

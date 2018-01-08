@@ -319,3 +319,6 @@
     (if (null? val-pair)
       (add-binding-to-frame! var val frame)
       (set-car! val-pair val))))
+
+; ex 4.14: The environment's map function dosen't know what to do with the
+; datatypes we're using in our evaluator.

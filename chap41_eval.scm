@@ -246,6 +246,7 @@
               (list 'try-cases try-cases))
         (list 'try-cases 'cases)))
 
+; ex 4.20
 (define (letrec->let exp)
   (define (make-sets params body)
     (if (null? params)

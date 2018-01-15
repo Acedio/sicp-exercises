@@ -322,3 +322,42 @@
 
 ; ex 4.14: The environment's map function dosen't know what to do with the
 ; datatypes we're using in our evaluator.
+
+; TODO: 4.16
+
+; ex 4.18: This will not work if the defines are pulled out as described in the
+; exercise. In the second internal define (dy), y is still assigned to
+; *unassigned* when it's resolved. This will work fine if the defines are pulled
+; out as described in the text.
+
+; ex 4.21 (Y-combinator :D)
+; example, factorial
+((lambda (n)
+   ((lambda (fact) (fact fact n))
+    (lambda (ft k)
+      (if (= k 1)
+        1
+        (* k (ft ft (- k 1)))))))
+ 10)
+
+; fibonacci
+((lambda (n a-init b-init)
+   ((lambda (fib) (fib fib n a-init b-init))
+    (lambda (ft n a b)
+      (if (= n 0)
+        b
+        (ft ft (- n 1) b (+ a b))))))
+ 10 0 1)
+
+; Slow even? with y-combinator
+(define (f x)
+  ((lambda (even? odd?)
+     (even? even? odd? x))
+   (lambda (ev? od? n)
+     (if (= n 0)
+       #t
+       (od? ev? od? (- n 1))))
+   (lambda (ev? od? n)
+     (if (= n 0)
+       #f
+       (ev? ev? od? (- n 1))))))

@@ -6,17 +6,17 @@
       false))
 
 (define syntax-list '())
-(define (put-syntax tag eval-exp)
+(define (put-syntax tag analyze-exp)
   (cond ((assoc tag syntax-list)
          (error "Syntax tag already exists!"
                 tag))
         (else (set!
                 syntax-list
-                (cons (cons tag eval-exp)
+                (cons (cons tag analyze-exp)
                       syntax-list)))))
 (define (get-syntax tag)
   (cond ((assoc tag syntax-list)
-         => (lambda (tagged-eval-exp) (cdr tagged-eval-exp)))
+         => (lambda (tagged-analyze-exp) (cdr tagged-analyze-exp)))
         (else false)))
 
 (define (self-evaluating? exp)
@@ -42,36 +42,34 @@
 ; Eval and special syntaxes.
 ; --------------------------
 
-(define eval-in-underlying-scheme eval)
-(define apply-in-underlying-scheme apply)
-; apply is defined later, but sticking a placeholder in the
-; current scope so eval doesn't bind to the underlying apply.
-(define (apply proc args) 'false)
-
 (define (eval exp env)
+  ((analyze exp) env))
+(define (analyze exp)
   (cond ((self-evaluating? exp)
-         exp)
+         (lambda (env) exp))
         ((variable? exp)
-         (lookup-variable-value exp env))
+         (lambda (env)
+           (lookup-variable-value exp env)))
         ((get-syntax (car exp))
-         => (lambda (eval-exp)
-              (eval-exp exp env)))
+         => (lambda (analyze-exp)
+              (let ((analyzed-exp (analyze-exp exp)))
+                (lambda (env)
+                  (analyzed-exp env)))))
         ((application? exp)
-         (apply (eval (operator exp) env)
-                (list-of-values 
-                 (operands exp) 
-                 env)))
+         (analyze-application exp))
         (else
          (error "Unknown expression 
                  type: EVAL" exp))))
 
 (define (install-syntax)
   (put-syntax 'quote
-              (lambda (exp env)
-                (text-of-quotation exp)))
+              (lambda (exp)
+                (let ((quotation-text (text-of-quotation exp)))
+                  (lambda (env) quotation-text))))
   (put-syntax 'list
-              (lambda (exp env)
-                (eval-list exp env)))
+              (lambda (exp)
+                (lambda (env)
+                  (eval-list exp env))))
   (put-syntax 'set!
               (lambda (exp env)
                 (eval-assignment exp env)))
@@ -268,33 +266,37 @@
 ; Apply and friends.
 ; ------------------
 
-; apply was already defined above, so just modify that var.
-(set! apply
-  (lambda (procedure arguments)
-    (cond ((primitive-procedure? procedure)
-           (apply-primitive-procedure
-             procedure
-             arguments))
-          ((compound-procedure? procedure)
-           (eval-sequence
-             (procedure-body procedure)
-             (extend-environment
-               (procedure-parameters 
-                procedure)
-               arguments
-               (procedure-environment 
-                procedure))))
-          (else
-            (error "Unknown procedure type: APPLY"
-                   procedure)))))
+(define (analyze-application exp)
+  (let ((analyzed-operator (analyze (operator exp)))
+        (analyzed-operands (map analyze (operands exp))))
+    (lambda (env)
+      (execute-apply (analyzed-operator env)
+                     (map (lambda (analyzed-operand)
+                            (analyzed-operand env))
+                          analyzed-operands)))))
+(define (execute-apply procedure arguments)
+  (cond ((primitive-procedure? procedure)
+         (apply-primitive-procedure
+           procedure
+           arguments))
+        ((compound-procedure? procedure)
+         ((procedure-body procedure)
+          (extend-environment
+            (procedure-parameters 
+             procedure)
+            arguments
+            (procedure-environment 
+             procedure))))
+        (else
+          (error "Unknown procedure type: APPLY"
+                 procedure))))
 
 (define (primitive-procedure? proc)
   (tagged-list? proc 'primitive))
 (define (primitive-implementation proc) 
   (cadr proc))
 (define (apply-primitive-procedure proc args)
-  (apply-in-underlying-scheme
-   (primitive-implementation proc) args))
+  (apply (primitive-implementation proc) args))
 
 (define (make-procedure parameters body env)
   (list 'procedure parameters body env))

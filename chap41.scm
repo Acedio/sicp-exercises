@@ -361,3 +361,21 @@
      (if (= n 0)
        #f
        (ev? ev? od? (- n 1))))))
+
+; ex 4.24
+; Testing with the following inefficient fibonacci procedure yields about a 40%
+; speed increase in the analyzing evaluator.
+
+(define fib (lambda (a)
+  (cond ((= a 0) 1)
+        ((= a 1) 1)
+        (else (+ (fib (- a 1))
+                 (fib (- a 2)))))))
+
+; This factorial procedure is about 30% faster on the analyzing evaluator.
+
+(define fact
+  (lambda (a)
+    (if (= a 0)
+      1
+      (* a (fact (- a 1))))))

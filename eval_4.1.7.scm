@@ -42,8 +42,15 @@
 ; Eval and special syntaxes.
 ; --------------------------
 
+(define (show desc exp)
+  (display desc)
+  (display exp)
+  (newline)
+  (newline))
+
 (define (eval exp env)
   ((analyze exp) env))
+
 (define (analyze exp)
   (cond ((self-evaluating? exp)
          (lambda (env) exp))
@@ -56,62 +63,58 @@
                 (lambda (env)
                   (analyzed-exp env)))))
         ((application? exp)
-         (analyze-application exp))
+         (begin
+           (analyze-application exp)))
         (else
          (error "Unknown expression 
                  type: EVAL" exp))))
+
+(define (analyze-sequence exps)
+  (define (sequentially a b)
+    (lambda (env) (a env) (b env)))
+  (define (loop first-proc rest-procs)
+    (if (null? rest-procs)
+      first-proc
+      (loop (sequentially first-proc (car rest-procs))
+            (cdr rest-procs))))
+  (let ((procs (map analyze exps)))
+    (if (null? procs)
+      (error "Empty sequence: ANALYZE")
+      (loop (car procs) (cdr procs)))))
 
 (define (install-syntax)
   (put-syntax 'quote
               (lambda (exp)
                 (let ((quotation-text (text-of-quotation exp)))
                   (lambda (env) quotation-text))))
-  (put-syntax 'list
-              (lambda (exp)
-                (lambda (env)
-                  (eval-list exp env))))
   (put-syntax 'set!
-              (lambda (exp env)
-                (eval-assignment exp env)))
+              (lambda (exp)
+                (analyze-assignment exp)))
   (put-syntax 'define
-              (lambda (exp env)
-                (eval-definition exp env)))
+              (lambda (exp)
+                (analyze-definition exp)))
   (put-syntax 'if
-              (lambda (exp env)
-                (eval-if exp env)))
+              (lambda (exp)
+                (analyze-if exp)))
   (put-syntax 'lambda
-              (lambda (exp env)
-                (make-procedure
-                  (lambda-parameters exp)
-                  (lambda-body exp)
-                  env)))
-  (put-syntax 'begin
-              (lambda (exp env)
-                (eval-sequence
-                  (begin-actions exp) env)))
-  ; The below are handled as syntax transforms.
-  (put-syntax 'let
-              (lambda (exp env)
-                (eval (let->lambda exp) env)))
-  (put-syntax 'letrec
-              (lambda (exp env)
-                (eval (letrec->let exp) env)))
-  (put-syntax 'cond
-              (lambda (exp env)
-                (eval (cond->if exp) env))))
-(install-syntax)
+              (lambda (exp)
+                (analyze-lambda exp)))
 
-(define (list-of-values exps env)
-  (if (no-operands? exps)
-      '()
-      (cons (eval (first-operand exps) env)
-            (list-of-values 
-             (rest-operands exps) 
-             env))))
-(define (list-elements exp)
-  (cdr exp))
-(define (eval-list exp env)
-  (list-of-values (list-elements exp) env))
+  ; The below are handled as syntax transforms.
+  (let ((put-sugar (lambda (tag transform-fn)
+                     (put-syntax
+                       tag
+                       (lambda (exp)
+                         (let ((analyzed (analyze (transform-fn exp))))
+                           (lambda (env)
+                             (analyzed env))))))))
+    ; TODO: Implement (list ...) and (begin ...) as syntactic sugar.
+    (put-sugar 'list (lambda (exp) (list->cons exp)))
+    (put-sugar 'begin (lambda (exp) (begin->lambda exp)))
+    (put-sugar 'let (lambda (exp) (let->lambda exp)))
+    (put-sugar 'letrec (lambda (exp) (letrec->let exp)))
+    (put-sugar 'cond (lambda (exp) (cond->if exp)))))
+(install-syntax)
 
 (define (text-of-quotation exp)
   (cadr exp))
@@ -120,23 +123,23 @@
   (cadr exp))
 (define (assignment-value exp)
   (caddr exp))
-(define (eval-assignment exp env)
-  (set-variable-value! 
-   (assignment-variable exp)
-   (eval (assignment-value exp) env)
-   env)
-  'ok)
+(define (analyze-assignment exp)
+  (let ((var (assignment-variable exp))
+        (vproc (analyze (assignment-value exp))))
+    (lambda (env)
+      (set-variable-value! var (vproc env) env)
+      'ok)))
 
 (define (definition-variable exp)
   (cadr exp))
 (define (definition-value exp)
   (caddr exp))
-(define (eval-definition exp env)
-  (define-variable! 
-    (definition-variable exp)
-    (eval (definition-value exp) env)
-    env)
-  'ok)
+(define (analyze-definition exp)
+  (let ((var (definition-variable exp))
+        (vproc (analyze (definition-value exp))))
+    (lambda (env)
+      (define-variable! var (vproc env) env)
+      'ok)))
 
 (define (make-if predicate consequent alternative)
   (list 'if predicate consequent alternative))
@@ -146,18 +149,14 @@
   (caddr exp))
 (define (if-alternative exp)
   (cadddr exp))
-(define (eval-if exp env)
-  (if (true? (eval (if-predicate exp) env))
-      (eval (if-consequent exp) env)
-      (eval (if-alternative exp) env)))
-
-(define (eval-sequence exps env)
-  (cond ((last-exp? exps) 
-         (eval (first-exp exps) env))
-        (else 
-         (eval (first-exp exps) env)
-         (eval-sequence (rest-exps exps) 
-                        env))))
+(define (analyze-if exp)
+  (let ((pred (analyze (if-predicate exp)))
+        (cnsq (analyze (if-consequent exp)))
+        (alt (analyze (if-alternative exp))))
+    (lambda (env)
+      (if (true? (pred env))
+        (cnsq env)
+        (alt env)))))
 
 ; parameters and body are lists of params and body expressions, respectively.
 (define (make-let parameters body)
@@ -184,6 +183,11 @@
   (cadr exp))
 (define (lambda-body exp)
   (cddr exp))
+(define (analyze-lambda exp)
+  (let ((params (lambda-parameters exp))
+        (bproc (analyze-sequence (lambda-body exp))))
+    (lambda (env)
+      (make-procedure params bproc env))))
 
 (define (sequence->exp seq)
   (cond ((null? seq) seq)

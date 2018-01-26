@@ -108,7 +108,6 @@
                          (let ((analyzed (analyze (transform-fn exp))))
                            (lambda (env)
                              (analyzed env))))))))
-    ; TODO: Implement (list ...) and (begin ...) as syntactic sugar.
     (put-sugar 'list (lambda (exp) (list->cons exp)))
     (put-sugar 'begin (lambda (exp) (begin->lambda exp)))
     (put-sugar 'let (lambda (exp) (let->lambda exp)))
@@ -188,6 +187,18 @@
         (bproc (analyze-sequence (lambda-body exp))))
     (lambda (env)
       (make-procedure params bproc env))))
+
+(define (make-cons a b)
+  (list 'cons a b))
+(define (list->cons exp)
+  (define (loop exps)
+    (if (null? exps)
+      (quote '())
+      (make-cons (car exps) (loop (cdr exps)))))
+  (loop (cdr exp)))
+
+(define (begin->lambda exp)
+  (list (make-lambda '() (cdr exp))))
 
 (define (sequence->exp seq)
   (cond ((null? seq) seq)

@@ -389,6 +389,7 @@
         (list 'cddr cddr)
         (list 'cons cons)
         (list 'null? null?)
+        (list '= =)
         (list '+ +)
         (list '- -)
         (list '/ /)
